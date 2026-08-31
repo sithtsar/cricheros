@@ -6,6 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from .fetch import load_registry
+
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 NOW = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -176,6 +178,29 @@ def _perf(pid: int, sc: dict) -> dict | None:
     return perf if perf["team_id"] is not None else None
 
 
+def export_flat(players: list[dict]) -> Path:
+    """Regenerate the combined per-player dump (data/players.json) from raw."""
+    out = []
+    for r in players:
+        pdir = RAW / str(r["player_id"])
+        item = dict(r)
+        for fname, key in (("profile.json", "get-player-profile-web"),
+                           ("stats.json", "get-player-statistic")):
+            f = pdir / fname
+            if f.exists():
+                item[key] = json.loads(f.read_text()).get("data") or {}
+        matches = []
+        for p in sorted(pdir.glob("matches_p*.json"),
+                        key=lambda p: int(p.stem.split("_p")[1])):
+            matches += json.loads(p.read_text()).get("data") or []
+        if matches:
+            item["get-player-match"] = matches
+        out.append(item)
+    dest = ROOT / "data" / "players.json"
+    dest.write_text(json.dumps(out, indent=2))
+    return dest
+
+
 def normalize() -> dict:
     con = sqlite3.connect(ROOT / "analysis.db")
     cur = con.cursor()
@@ -308,4 +333,5 @@ def normalize() -> dict:
             w.writerow(cols)
             w.writerows(cur.execute(f"SELECT * FROM {tbl}"))
     con.close()
+    n["flat"] = str(export_flat(load_registry()))
     return n
