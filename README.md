@@ -13,9 +13,10 @@ shortlink, or a bare player id) resolves to the profile id.
 **Everything fetched is written to disk the moment it arrives.** Raw JSON under
 `data/raw/` is the source of truth — **and it is versioned**: the checkpoint
 layer travels with the repo, so a clone has the full cache and never refetches
-history. (The sqlite db and CSVs are derived, so they stay untracked; `.fail`
-markers are runtime state, also untracked.) Kill a run mid-way and re-running
-resumes: profiles/stats/matches/scorecards that already exist on disk are never
+history. The sqlite db, the CSVs, and the flat `data/players.json` dump are
+derived from it and versioned alongside it (`.fail` markers remain runtime
+state, untracked). Kill a run mid-way and re-running resumes:
+profiles/stats/matches/scorecards that already exist on disk are never
 refetched. Fetches are parallel across players (`--players`) and across
 scorecards (`--scorecard-workers`).
 
