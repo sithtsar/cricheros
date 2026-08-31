@@ -202,7 +202,7 @@ def export_flat(players: list[dict]) -> Path:
 
 
 def normalize() -> dict:
-    con = sqlite3.connect(ROOT / "analysis.db")
+    con = sqlite3.connect(ROOT / "data" / "analysis.db")
     cur = con.cursor()
     for tbl, ddl in DDL.items():
         cur.execute(f"DROP TABLE IF EXISTS {tbl}")
@@ -327,7 +327,7 @@ def normalize() -> dict:
 
     con.commit()
     for tbl in ("players", "player_career", "matches", "match_performances"):
-        with open(ROOT / f"{tbl}.csv", "w", newline="") as f:
+        with open(ROOT / "data" / f"{tbl}.csv", "w", newline="") as f:
             cols = [c[1] for c in cur.execute(f"PRAGMA table_info({tbl})")]
             w = csv.writer(f)
             w.writerow(cols)

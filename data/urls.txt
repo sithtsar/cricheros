@@ -1,0 +1,32 @@
+# cricheroes player profile urls (the original 30)
+# usage: uv run ch add --file data/urls.txt
+https://cricheroes.com/player-profile/16993605/aashutosh-ajay-sharma/matches
+https://cricheroes.com/player-profile/16994391/sunil-kulkarni/matches
+https://cricheroes.com/player-profile/16180153/sandip-katore/matches
+https://cricheroes.com/player-profile/1590015/ankush-regundwar/matches
+https://cricheroes.com/player-profile/30533056/shiv-jirwankar/matches
+https://cricheroes.com/player-profile/38717191/atul-gupta/matches
+https://chshare.link/player/lAKTgO
+https://cricheroes.com/player-profile/25957882/madhur-maheshwari/matches
+https://cricheroes.com/player-profile/34487194/Omkar-Dnyanmote/matches
+https://cricheroes.com/player-profile/24889477/mayuresh-behere/matches
+https://cricheroes.com/player-profile/37011117/zeeshan-ali/matches
+https://chshare.link/player/ixulOg
+https://cricheroes.com/player-profile/25358833/manoj-sathe/profile
+https://cricheroes.com/player-profile/32358254/ashish-biradar/matches
+https://chshare.link/player/h9Axuz
+https://cricheroes.com/player-profile/4580403/kalpesh-soni/matches
+https://cricheroes.com/player-profile/42581467/onkar-j/matches
+https://cricheroes.com/player-profile/24857709/shreyash-naik/matches
+https://cricheroes.com/player-profile/10589490/tejas-mudekar/matches
+https://cricheroes.com/player-profile/30042042/sopan-shelar/matches
+https://chshare.link/player/pJpqVl
+https://cricheroes.com/player-profile/25474188/pavan-zalani/matches
+https://cricheroes.com/player-profile/4246816/pramod-bavchikar/matches
+https://chshare.link/player/cPu7x2
+https://chshare.link/player/dZHSnp
+https://cricheroes.com/player-profile/3802331/abhishek-nishad/matches
+https://cricheroes.com/player-profile/28452112/prasad-khanderai-vc/matches
+https://cricheroes.com/player-profile/53517647/kedar-pegdal/matches
+https://cricheroes.com/player-profile/24858042/chetan-keskar/matches
+https://cricheroes.com/player-profile/34514683/nikhil-jogdand/matches

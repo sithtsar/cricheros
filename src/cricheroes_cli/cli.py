@@ -28,7 +28,11 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser(
         "add", help="add player URLs (or ids) to the registry and fetch them"
     )
-    a.add_argument("links", nargs="+")
+    a.add_argument("links", nargs="*", help="urls, or - to read urls from stdin")
+    a.add_argument(
+        "--file", action="append", default=[], metavar="PATH",
+        help=".txt/.tsv/.csv file with urls (repeatable); '-' = stdin",
+    )
     a.add_argument("--workers", type=int, default=12)
 
     f = sub.add_parser("fetch", help="incrementally fetch everything in the registry")
@@ -47,12 +51,23 @@ def main(argv: list[str] | None = None) -> int:
     from . import fetch, normalize, urls
 
     if args.cmd == "add":
-        added = fetch.add_players(args.links, urls.resolve)
+        links = list(args.links)
+        if "-" in links or (not links and not sys.stdin.isatty()):
+            links = [x for x in links if x != "-"] + urls.read_links("-")
+        for src in args.file:
+            links += urls.read_links(src)
+        if not links:
+            print("no urls given; pass urls as args, --file PATH, or pipe stdin")
+            return 1
+        added = fetch.add_players(links, urls.resolve)
         print(
             f"added {len(added)} new players (registry now "
             f"{len(fetch.load_registry())})"
         )
-        fetch.fetch(players=min(8, len(args.links)), scorecard_workers=args.workers)
+        if not added:
+            print("nothing new; run 'ch fetch' to refresh existing players")
+            return 0
+        fetch.fetch(players=min(8, max(1, len(links))), scorecard_workers=args.workers)
         n = normalize.normalize()
         print(f"db rebuilt: {n}")
         return 0
