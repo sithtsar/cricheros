@@ -1,0 +1,85 @@
+# cricheroes-cli
+
+Incremental, resumable, parallel scraper for [cricheroes.com](https://cricheroes.com)
+player profiles → SQLite + CSVs for analysis.
+
+## How it works
+
+The public site is a Next.js SPA behind Cloudflare. It talks to a private API
+(`api.cricheroes.in/api/v1`, key included in the site's own JS bundle); the CLI
+talks to that API directly. A player link (or `chshare.link/player/...`
+shortlink, or a bare player id) resolves to the profile id.
+
+**Everything fetched is written to disk the moment it arrives.** Raw JSON under
+`data/raw/` is the source of truth — **and it is versioned**: the checkpoint
+layer travels with the repo, so a clone has the full cache and never refetches
+history. (The sqlite db and CSVs are derived, so they stay untracked; `.fail`
+markers are runtime state, also untracked.) Kill a run mid-way and re-running
+resumes: profiles/stats/matches/scorecards that already exist on disk are never
+refetched. Fetches are parallel across players (`--players`) and across
+scorecards (`--scorecard-workers`).
+
+## Layout
+
+```
+data/raw/{player_id}/profile.json        identity + summary
+data/raw/{player_id}/stats.json          career batting/bowling/fielding/captain rows
+data/raw/{player_id}/matches_p{N}.json   player's match list, one page per file (resume point)
+data/raw/scorecards/{match_id}.json      full scorecard: per-player batting/bowling lines
+data/registry/players.json               the known set (append-only)
+logs/fetch.log                           every fetch step, timestamped
+analysis.db                              SQLite: players, player_career, matches, match_performances
+*.csv                                    same four tables exported
+```
+
+## Commands
+
+```bash
+uv run ch add <url-or-id>...        # register + fetch + rebuild db
+uv run ch fetch                     # incremental refresh of the whole registry
+uv run ch fetch --seed old.json     # one-off: seed raw cache from a flat players.json
+uv run ch normalize                 # rebuild db + CSVs from raw cache (idempotent)
+uv run ch list                      # show registry
+```
+
+## The four tables
+
+- `players` — identity: name, dob, city, batting hand, bowling style, role, career totals.
+- `player_career` — one typed row per player: batting (runs/avg/sr/50s/100s…),
+  bowling (overs/wickets/econ/best…), fielding (catches/run-outs…), captaincy.
+- `matches` — one row per match: date, tournament, ground, teams, toss, result, margin.
+- `match_performances` — the analysis grain: per player per match, batting line
+  (runs, balls, 4s, 6s, sr, how out, position) and bowling line (overs, wickets,
+  econ, wides, dots). Composite PK `(player_id, match_id)`.
+
+## Why SQLite (not duckdb)
+
+Append-on-write is sqlite's native mode and the driver is in the stdlib; duckdb is
+an analytics engine that wants bulk loads. For queries, duckdb reads the sqlite
+file directly — no migration:
+
+```bash
+duckdb -c "ATTACH 'analysis.db' AS a; SELECT name, batting_runs FROM a.player_career ORDER BY batting_runs DESC LIMIT 5;"
+```
+
+Run `uv run ch add` and the new player's data is fetched (parallel), appended to
+the registry, and the db rebuilt in the same command. Raw files make the growth
+incremental: only missing scorecards are ever fetched.
+
+## Notes / caveats
+
+- Values are typed at normalize time (avg/econ as REAL, "%" stripped from
+  percentages, overs = balls/6, not-out markers stripped from highest scores).
+- Endpoints that consistently fail (abandoned/live matches without scorecards,
+  players with no matches) are marked with `data/raw/{player_id}/matches.fail`
+  or `data/raw/scorecards/{match_id}.fail` and skipped on later runs. Delete the
+  marker to retry. Failures are logged to `logs/fetch.log`.
+- The db is rebuilt from raw on every `normalize`/`add`, so it is always
+  consistent with the cache — treat it as derived, never as the source.
+
+## Development
+
+```bash
+uvx ruff check src/ && uvx ruff format --check src/
+uvx ty check src/cricheroes_cli
+```
