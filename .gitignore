@@ -3,5 +3,4 @@ __pycache__/
 *.pyc
 logs/
 analysis.db
-*.csv
 data/raw/**/*.fail
