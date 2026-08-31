@@ -2,5 +2,4 @@
 __pycache__/
 *.pyc
 logs/
-analysis.db
 data/raw/**/*.fail
