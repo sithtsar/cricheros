@@ -1,4 +1,8 @@
-"""Rebuild analysis.db + CSVs from the raw cache. Idempotent; safe to rerun."""
+"""Rebuild analysis.db + CSVs from the raw cache. Idempotent; safe to rerun.
+Slim schema: only Name + 5 stats (batting_matches, batting_runs, batting_sr,
+bowling_wickets, bowling_economy). Any new player added via manifest will be
+normalized to this same projection (NULL where no bowling/batting data).
+"""
 
 import csv
 import datetime
@@ -12,29 +16,18 @@ ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
 NOW = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+# Slim DDL: players holds identity, player_career holds the 5 requested stats
+# (plus name denormalized for direct CSV match to user table).
+# matches / match_performances are retained as derived detail but are NOT part
+# of the "player schema" - they can be dropped if strict single-table needed.
 DDL = {
     "players": """CREATE TABLE players(
-        player_id INTEGER PRIMARY KEY, name TEXT, profile_photo TEXT, dob TEXT, city_id INTEGER,
-        city_name TEXT, batting_hand TEXT, bowling_style TEXT, playing_role TEXT,
-        batter_category TEXT, bowler_category TEXT, player_skill TEXT, player_statement TEXT,
-        is_pro INTEGER, total_matches INTEGER, total_runs INTEGER, total_wickets INTEGER,
-        total_views INTEGER, fetched_at TEXT)""",
+        player_id INTEGER PRIMARY KEY, name TEXT, fetched_at TEXT)""",
     "player_career": """CREATE TABLE player_career(
-        player_id INTEGER PRIMARY KEY, fetched_at TEXT,
-        batting_matches INTEGER, batting_innings INTEGER, batting_not_out INTEGER,
-        batting_runs INTEGER, batting_highest TEXT, batting_avg REAL, batting_sr REAL,
-        batting_thirties INTEGER, batting_fifties INTEGER, batting_hundreds INTEGER,
-        batting_fours INTEGER, batting_sixes INTEGER, batting_ducks INTEGER,
-        matches_won INTEGER, matches_lost INTEGER,
-        bowling_matches INTEGER, bowling_innings INTEGER, bowling_overs TEXT, bowling_maidens INTEGER,
-        bowling_wickets INTEGER, bowling_runs INTEGER, bowling_best TEXT, bowling_3w INTEGER,
-        bowling_5w INTEGER, bowling_economy REAL, bowling_sr REAL, bowling_avg REAL,
-        bowling_wides INTEGER, bowling_noballs INTEGER, bowling_dots INTEGER,
-        bowling_fours INTEGER, bowling_sixes INTEGER,
-        fielding_matches INTEGER, fielding_catches INTEGER, fielding_caught_behind INTEGER,
-        fielding_run_outs INTEGER, fielding_stumpings INTEGER, fielding_assisted_run_outs INTEGER,
-        fielding_bye_runs INTEGER,
-        captain_matches INTEGER, captain_toss_won INTEGER, captain_win_pct REAL, captain_loss_pct REAL)""",
+        player_id INTEGER PRIMARY KEY, name TEXT,
+        batting_matches INTEGER, batting_runs INTEGER, batting_sr REAL,
+        bowling_wickets INTEGER, bowling_economy REAL,
+        fetched_at TEXT)""",
     "matches": """CREATE TABLE matches(
         match_id INTEGER PRIMARY KEY, match_type TEXT, ball_type TEXT, status TEXT,
         start_datetime TEXT, city_id INTEGER, city_name TEXT, ground_id INTEGER, ground_name TEXT,
@@ -53,69 +46,39 @@ DDL = {
         PRIMARY KEY(player_id, match_id))""",
 }
 
-# map cricheroes stat row titles -> column suffix per group
-COLS = {
-    "matches": "matches",
-    "innings": "innings",
-    "not_out": "not_out",
-    "runs": "runs",
-    "highest_runs": "highest",
-    "avg": "avg",
-    "sr": "sr",
-    "30s": "thirties",
-    "50s": "fifties",
-    "100s": "hundreds",
-    "4s": "fours",
-    "6s": "sixes",
-    "ducks": "ducks",
-    "overs": "overs",
-    "maidens": "maidens",
-    "wickets": "wickets",
-    "best_bowling": "best",
-    "3_wickets": "3w",
-    "5_wickets": "5w",
-    "economy": "economy",
-    "wides": "wides",
-    "noballs": "noballs",
-    "dot_balls": "dots",
-    "catches": "catches",
-    "caught_behind": "caught_behind",
-    "run_outs": "run_outs",
-    "stumpings": "stumpings",
-    "assisted_run_outs": "assisted_run_outs",
-    "bye_runs_(wk)": "bye_runs",
-    "toss_won": "toss_won",
-    "win_per": "win_pct",
-    "loss_per": "loss_pct",
-}
-PREFIX = {
-    "batting": "batting_",
-    "bowling": "bowling_",
-    "fielding": "fielding_",
-    "captain": "captain_",
-}
 
-
-def _stat_rows(stats: dict, grp: str) -> dict:
-    out = {"matches_won": None, "matches_lost": None}
-    for r in stats.get(grp) or []:
-        t = str(r["title"]).lower().replace(" ", "_").replace("_runs_(wk)", "_bye_runs")
-        if t == "won":
-            out["matches_won"] = r["value"]
-            continue
-        if t == "loss":
-            out["matches_lost"] = r["value"]
-            continue
-        col = COLS.get(t)
-        if not col:
-            continue
-        v = r["value"]
-        if col in ("avg", "sr", "economy", "win_pct", "loss_pct"):
-            try:
-                v = float(str(v).rstrip("%"))
-            except ValueError:
-                v = None
-        out[PREFIX[grp] + col] = v
+def _extract_slim(stats: dict) -> dict:
+    """Extract only the 5 requested columns from cricheroes statistics dict."""
+    out = {
+        "batting_matches": None,
+        "batting_runs": None,
+        "batting_sr": None,
+        "bowling_wickets": None,
+        "bowling_economy": None,
+    }
+    if not stats:
+        return out
+    for grp in ("batting", "bowling"):
+        for r in stats.get(grp) or []:
+            title = str(r["title"]).strip().lower()
+            val = r["value"]
+            if grp == "batting":
+                if title == "matches":
+                    try: out["batting_matches"] = int(val) if val not in (None, "") else None
+                    except: out["batting_matches"] = None
+                elif title == "runs":
+                    try: out["batting_runs"] = int(val) if val not in (None, "") else None
+                    except: out["batting_runs"] = None
+                elif title == "sr":
+                    try: out["batting_sr"] = float(str(val)) if val not in (None, "") else None
+                    except: out["batting_sr"] = None
+            elif grp == "bowling":
+                if title == "wickets":
+                    try: out["bowling_wickets"] = int(val) if val not in (None, "") else None
+                    except: out["bowling_wickets"] = None
+                elif title == "economy":
+                    try: out["bowling_economy"] = float(str(val)) if val not in (None, "") else None
+                    except: out["bowling_economy"] = None
     return out
 
 
@@ -217,42 +180,27 @@ def normalize() -> dict:
             continue
         pid = int(pdir.name)
         prof = json.loads((pdir / "profile.json").read_text()).get("data") or {}
+        name = prof.get("name")
         cur.execute(
-            "INSERT OR REPLACE INTO players VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                pid,
-                prof.get("name"),
-                prof.get("profile_photo"),
-                prof.get("dob"),
-                prof.get("city_id"),
-                prof.get("city_name"),
-                prof.get("batting_hand"),
-                prof.get("bowling_style"),
-                prof.get("playing_role"),
-                prof.get("batter_category"),
-                prof.get("bowler_category"),
-                prof.get("player_skill"),
-                prof.get("player_statement"),
-                1 if prof.get("is_pro") else 0,
-                prof.get("total_matches"),
-                prof.get("total_runs"),
-                prof.get("total_wickets"),
-                prof.get("total_views"),
-                NOW,
-            ),
+            "INSERT OR REPLACE INTO players VALUES (?,?,?)",
+            (pid, name, NOW),
         )
         n["players"] += 1
+        # stats -> slim 5 cols
+        slim = {"batting_matches": None, "batting_runs": None, "batting_sr": None,
+                "bowling_wickets": None, "bowling_economy": None}
         if (pdir / "stats.json").exists():
             stats = json.loads((pdir / "stats.json").read_text()).get("data") or {}
-            row = {"player_id": pid, "fetched_at": NOW}
-            for grp, _pfx in PREFIX.items():
-                row.update(_stat_rows(stats.get("statistics") or {}, grp))
-            cur.execute(
-                f"INSERT OR REPLACE INTO player_career ({', '.join(row)}) VALUES "
-                f"({', '.join('?' * len(row))})",
-                list(row.values()),
-            )
-            n["career"] += 1
+            slim = _extract_slim(stats.get("statistics") or {})
+        # Kedar Pegdal etc may have no stats -> stays NULL
+        cur.execute(
+            "INSERT OR REPLACE INTO player_career VALUES (?,?,?,?,?,?,?,?)",
+            (pid, name,
+             slim["batting_matches"], slim["batting_runs"], slim["batting_sr"],
+             slim["bowling_wickets"], slim["bowling_economy"],
+             NOW),
+        )
+        n["career"] += 1
 
     scdir = RAW / "scorecards"
     for scf in sorted(scdir.glob("*.json")):
