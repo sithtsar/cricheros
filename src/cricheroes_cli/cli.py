@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _log(level: int) -> None:
+    (ROOT / "logs").mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(message)s",
